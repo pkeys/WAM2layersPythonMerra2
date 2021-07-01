@@ -1,11 +1,12 @@
 # WAM2layersPythonMerra2-beta
 
 RELEASE NOTES
-The main developer of the original WAM2layers code is Ruud van der Ent (r.j.vanderent@uu.nl) and the MERRA2, Kenya-specific modifications led by Patrick W. Keys (patrick.keys@colostate.edu). Please let Pat know when you intend to use this Merra2 code for research, I might be able to offer some kind of support if it is in my interest as well, but I cannot guarantee to do any kind of troubleshooting for free as I have to work on my own projects as well.
+The main developer of the original WAM2layers code is Ruud van der Ent (r.j.vanderent@tudelft.nl) and the MERRA2, Kenya-specific modifications led by Patrick W. Keys (patrick.keys@colostate.edu). Please let Pat know when you intend to use this Merra2 code for research, I might be able to offer some kind of support if it is in my interest as well, but I cannot guarantee to do any kind of troubleshooting for free as I have to work on my own projects as well.
 
 This code Released under the GNU General Public License. Please cite this Github and 
-"Van der Ent, R. J. (2014), A new view on the hydrological cycle over continents, Ph.D. thesis, 96 pp, Delft University of Technology, Delft. 
-http://dx.doi.org/10.4233/uuid:0ab824ee-6956-4cc3-b530-3245ab4f32be."
+"Van der Ent, R. J., Wang-Erlandsson, L., Keys, P. W., & Savenije, H. H. G. (2014). 
+Contrasting roles of interception and transpiration in the hydrological cycle - Part 2: Moisture recycling. 
+Earth System Dynamics, 5(2), 471–489. https://doi.org/10.5194/esd-5-471-2014"
 
 Note:
 Please find the original WAM2layers code is found here: https://github.com/ruudvdent/WAM2layersPython
