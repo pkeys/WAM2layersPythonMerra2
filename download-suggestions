@@ -1,0 +1,13 @@
+MERRA2 data download suggestions:
+*Note: There are multiple ways to download the data
+1. Create an Earthdata account (https://urs.earthdata.nasa.gov/)
+
+2. Link your GES DISC (https://disc.gsfc.nasa.gov/earthdata-login)
+
+3. Go to the NASA GES DISC page and find the data that you would like to download (https://disc.gsfc.nasa.gov/)
+
+4. Make your selections, then click “Subset/ Get Data”
+
+5. Once you select the relevant variables and parameters, click Get Data.
+
+6. Download the list of links, and follow the instructions available here https://disc.gsfc.nasa.gov/data-access#mac_linux_wget 
