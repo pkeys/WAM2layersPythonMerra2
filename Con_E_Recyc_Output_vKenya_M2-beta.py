@@ -1,0 +1,304 @@
+#conda # -*- coding: utf-8 -*-
+"""
+Created on Thu Jun 16 13:24:45 2016
+
+@author: Ent00002
+"""
+
+# #%%delayed runs, comment the 2 lines below when unused
+# import time
+# print('Run delayed 32000 seconds')
+# time.sleep(32000)
+
+#%% Import libraries
+import os
+os.chdir('/Users/patrickkeys/rams_gdrive/work/research/models/WAM2layersPython-master/WAM2layersPython3/')
+
+import numpy as np
+import sys
+from netCDF4 import Dataset
+import scipy.io as sio
+import calendar
+import datetime
+from getconstants import getconstants
+from timeit import default_timer as timer
+
+import matplotlib.pyplot as plt
+
+import copy
+import cartopy as ct
+from mpl_toolkits.axes_grid1 import make_axes_locatable
+
+import matplotlib as mpl
+
+import warnings
+warnings.filterwarnings("ignore", category=RuntimeWarning)
+
+
+#%% BEGIN OF INPUT1 (FILL THIS IN)
+years = np.arange(1980 ,2020) # fill in the years backward
+yearpart = np.arange(0,366) # for a full (leap)year fill in np.arange(0,366)
+#start_iDOY = 305 #start day of year BACKWARD TRACKING
+#end_iDOY = 0 #end day of year for BACKwARD TRACKING
+divt = 48 # division of the timestep, 24 means a calculation timestep of 6/24 = 0.25 hours (numerical stability purposes)
+count_time = 4 # number of indices to get data from (for six hourly data this means everytime one day)
+
+# Manage the extent of your dataset (FILL THIS IN)
+# Define the latitude and longitude cell numbers to consider and corresponding lakes that should be considered part of the land
+latnrs = np.arange(20,341)#(0,361)
+lonnrs = np.arange(0,576)# Full MERRA2 range is (0,576)
+isglobal = 1 # fill in 1 for global computations (i.e. Earth round), fill in 0 for a local domain with boundaries
+
+# obtain the constants
+invariant_data  = '/Users/patrickkeys/rams_gdrive/work/research/models/WAM2layersPython-master/WAM2layersPython3/data/constants/MERRA2_101.const_2d_asm_Nx.00000000.nc4'
+
+# obtain the constants
+latitude,longitude,ilat_SwapGridtoERA,ilon_SwapGridtoERA,lsm,g,density_water,timestep,A_gridcell,L_N_gridcell,L_S_gridcell,L_EW_gridcell,gridcellLat,gridcellLon = getconstants(latnrs,lonnrs,lake_mask,invariant_data, lsmName='FRLAND')
+# BEGIN OF INPUT 2 (FILL THIS IN)
+kenya_region_mat = sio.loadmat('/Users/patrickkeys/rams_gdrive/work/research/models/WAM2layersPython-master/WAM2layersPython3/kenya_grid.mat')['kenya_grid']
+Region = kenya_region_mat
+Region = Region[latnrs,:]
+Region = Region[:,lonnrs]
+Region = Region[ilat_SwapGridtoERA,:]
+Region = Region[:,ilon_SwapGridtoERA]
+
+
+# BEGIN OF INPUT 2 (FILL THIS IN)
+daily = 0 # 1 for writing out daily data, 0 for only monthly data
+timetracking = 0 # 0 for not tracking time and 1 for tracking time
+
+# function to determine what the Directory number is
+interdata_folder = '/Volumes/lindsey/merra_2/back_tracking/Sa_track_files/' #must be an existing folder, existence is not checked
+sub_interdata_folder = os.path.join(interdata_folder, '2020_72/')        
+output_dir = '/Volumes/onenight/merra_2/output/back_tracking/2020_72/'
+
+def get_FS_dir_wildNumStr(year):
+    if(year>=1980 and year<1990):
+        fluxes_and_states_dir = '/Volumes/coffey/merra_2/fluxes_and_states_2020_70/' #must be an existing folder, existence is not checked
+    elif(year>=1990 and year<=2020):
+        fluxes_and_states_dir = '/Volumes/kane/merra_2/fluxes_and_states_2020_70/' #must be an existing folder, existence is not checked
+    else:
+        sys.exit("Fluxes and States wildcard number string could not be determined. Check your input year.")
+    
+    return fluxes_and_states_dir
+
+#END OF INPUT
+# %% Plotting code
+
+def plotMap(axes, data, lats, lons, cmap='coolwarm', vmin=None, vmax=None):  
+    image = plt.pcolormesh(lons,lats,data,transform=ct.crs.PlateCarree(),vmin=vmin,vmax=vmax,cmap=cmap, shading='flat')
+    axes.coastlines(color='black', linewidth=1.2)
+    divider = make_axes_locatable(axes)
+    ax_cb = divider.new_horizontal(size="2%", pad=0.1, axes_class=plt.Axes)  
+    plt.gcf().add_axes(ax_cb)  
+    cb = plt.colorbar(image,cax=ax_cb)
+    plt.sca(axes)   
+    return cb,image
+
+# define plotting diagnostics
+def plotDiagnostics(data, figName, lats=latitude, lons=longitude,vmin=None, vmax=None):
+    plt.figure(figsize=(10,6))
+    ax = plt.subplot(1,1,1,projection=ct.crs.PlateCarree())
+    cb,image = plotMap(ax,data,lats,lons,vmin=vmin,vmax=vmax)
+    plt.title(figName)
+    plt.savefig('figures/' + figName, dpi=400, bbox_inches='tight')
+    plt.show()
+    
+    # plotDiagnostics(np.squeeze(lsm),'LSM')
+
+#%% Datapaths (FILL THIS IN)
+
+
+def data_path(y,a,years,timetracking):
+    load_Sa_track = os.path.join(sub_interdata_folder, str(y) + '-' + str(a) + 'Sa_track.mat')
+    
+    load_Sa_time = os.path.join(sub_interdata_folder, str(y) + '-' + str(a) + 'Sa_time.mat')
+    
+    load_fluxes_and_storages = os.path.join(fluxes_and_states_dir, str(y) + '-' + str(a) + 'fluxes_storages.mat')
+
+    save_path = os.path.join(output_dir, 'E_track_continental_full' + str(years[0]) + '-' + str(years[-1]) + '-timetracking' + str(timetracking) + '.mat')
+    
+    save_path_daily = os.path.join(output_dir, 'E_track_continental_daily_full' + str(y) + '-timetracking' + str(timetracking) + '.mat')
+
+    return load_Sa_track,load_Sa_time,load_fluxes_and_storages,save_path,save_path_daily
+
+
+#%% Runtime & Results
+
+start1 = timer()
+startyear = years[0]
+
+E_per_year_per_month = np.zeros((len(years),12,len(latitude),len(longitude)))
+E_track_per_year_per_month = np.zeros((len(years),12,len(latitude),len(longitude)))
+P_per_year_per_month = np.zeros((len(years),12,len(latitude),len(longitude)))
+Sa_track_down_per_year_per_month = np.zeros((len(years),12,len(latitude),len(longitude)))
+Sa_track_top_per_year_per_month = np.zeros((len(years),12,len(latitude),len(longitude)))
+W_down_per_year_per_month = np.zeros((len(years),12,len(latitude),len(longitude)))
+W_top_per_year_per_month = np.zeros((len(years),12,len(latitude),len(longitude)))
+north_loss_per_year_per_month = np.zeros((len(years),12,1,len(longitude)))
+south_loss_per_year_per_month = np.zeros((len(years),12,1,len(longitude)))
+down_to_top_per_year_per_month = np.zeros((len(years),12,len(latitude),len(longitude)))
+top_to_down_per_year_per_month = np.zeros((len(years),12,len(latitude),len(longitude)))
+water_lost_per_year_per_month = np.zeros((len(years),12,len(latitude),len(longitude)))
+
+if timetracking == 1:
+    Sa_time_down_per_year_per_month = np.zeros((len(years),12,len(latitude),len(longitude)))
+    Sa_time_top_per_year_per_month = np.zeros((len(years),12,len(latitude),len(longitude)))
+    E_time_per_year_per_month = np.zeros((len(years),12,len(latitude),len(longitude)))
+
+for i in range(len(years)):
+    y = years[i]
+    ly = int(calendar.isleap(y))
+    final_time = 364+ly
+    
+    fluxes_and_states_dir = get_FS_dir_wildNumStr(y)
+    
+    E_per_day = np.zeros((365+ly,len(latitude),len(longitude)))
+    E_track_per_day = np.zeros((365+ly,len(latitude),len(longitude)))
+    P_per_day = np.zeros((365+ly,len(latitude),len(longitude)))
+    Sa_track_down_per_day = np.zeros((365+ly,len(latitude),len(longitude)))
+    Sa_track_top_per_day = np.zeros((365+ly,len(latitude),len(longitude)))
+    W_down_per_day = np.zeros((365+ly,len(latitude),len(longitude)))
+    W_top_per_day = np.zeros((365+ly,len(latitude),len(longitude)))
+    north_loss_per_day = np.zeros((365+ly,1,len(longitude)))
+    south_loss_per_day = np.zeros((365+ly,1,len(longitude)))
+    down_to_top_per_day = np.zeros((365+ly,len(latitude),len(longitude)))
+    top_to_down_per_day = np.zeros((365+ly,len(latitude),len(longitude)))
+    water_lost_per_day = np.zeros((365+ly,len(latitude),len(longitude)))
+    if timetracking == 1:
+        Sa_time_down_per_day = np.zeros((365+ly,len(latitude),len(longitude)))
+        Sa_time_top_per_day = np.zeros((365+ly,len(latitude),len(longitude)))
+        E_time_per_day = np.zeros((365+ly,len(latitude),len(longitude)))
+    
+    for j in range(len(yearpart)):
+        start = timer()
+        a = yearpart[j]
+        datapath = data_path(y,a,years,timetracking)
+        if a > final_time: # a = 365 (366th index) and not a leapyear\
+            pass
+        else:
+            # load tracked data
+            loading_ST = sio.loadmat(datapath[0],verify_compressed_data_integrity=False)
+            Sa_track_top = loading_ST['Sa_track_top']
+            Sa_track_down = loading_ST['Sa_track_down']
+            north_loss = loading_ST['north_loss']
+            south_loss = loading_ST['south_loss']
+            down_to_top = loading_ST['down_to_top']
+            top_to_down = loading_ST['top_to_down']
+            water_lost = loading_ST['water_lost']
+            # shadow_storage = loading_ST['shadow_storage']
+            Sa_track = Sa_track_top + Sa_track_down
+            if timetracking == 1:
+                loading_STT = sio.loadmat(datapath[1],verify_compressed_data_integrity=False)
+                Sa_time_top = loading_STT['Sa_time_top']
+                Sa_time_down = loading_STT['Sa_time_down']
+            
+            # load the total moisture data
+            loading_FS = sio.loadmat(datapath[2],verify_compressed_data_integrity=False)
+            Fa_E_top = loading_FS['Fa_E_top']
+            Fa_N_top = loading_FS['Fa_N_top']
+            Fa_E_down = loading_FS['Fa_E_down']
+            Fa_N_down = loading_FS['Fa_N_down']
+            Fa_Vert = loading_FS['Fa_Vert']
+            E = loading_FS['E']
+            P = loading_FS['P']
+            W_top = loading_FS['W_top']
+            W_down = loading_FS['W_down']
+
+            W = W_top + W_down
+               
+            # compute tracked evaporation
+            E_track = E[:,:,:] * (Sa_track_down[1:,:,:] / W_down[1:,:,:])
+            
+            # save per day
+            E_per_day[a,:,:] = np.sum(E, axis =0)
+            E_track_per_day[a,:,:] = np.sum(E_track, axis =0)
+            P_per_day[a,:,:] = np.sum(P, axis =0)
+            Sa_track_down_per_day[a,:,:] = np.mean(Sa_track_down[1:,:,:], axis =0)
+            Sa_track_top_per_day[a,:,:] = np.mean(Sa_track_top[1:,:,:], axis =0)
+            W_down_per_day[a,:,:] = np.mean(W_down[1:,:,:], axis =0)
+            W_top_per_day[a,:,:] = np.mean(W_top[1:,:,:], axis =0)
+            
+            north_loss_per_day[a,:,:] = np.sum(north_loss, axis =0)
+            south_loss_per_day[a,:,:] = np.sum(south_loss, axis =0)
+            down_to_top_per_day[a,:,:] = np.sum(down_to_top, axis =0)
+            top_to_down_per_day[a,:,:] = np.sum(top_to_down, axis =0)
+            water_lost_per_day[a,:,:] = np.sum(water_lost, axis =0)
+            
+            if timetracking == 1:
+                # compute tracked evaporation time
+                E_time = 0.5 * ( Sa_time_down[:-1,:,:] + Sa_time_down[1:,:,:] ) # seconds
+                
+                # save per day
+                Sa_time_down_per_day[a,:,:] = np.mean(Sa_time_down[:-1,:,:], axis=0) # seconds
+                Sa_time_top_per_day[a,:,:] = np.mean(Sa_time_top[:-1,:,:], axis=0) # seconds
+                E_time_per_day[a,:,:] = np.sum((E_time * E_track), axis = 0) / E_track_per_day[a,:,:] # seconds
+                
+                # remove nans                
+                where_are_NaNs = np.isnan(E_time_per_day)
+                E_time_per_day[where_are_NaNs] = 0
+        
+        end = timer()
+        print('Runtime output for day ' + str(a+1) + ' in year ' + str(y) + ' is',(end - start),' seconds.') 
+    
+    if daily == 1:
+        if timetracking == 0: # create dummy values
+            Sa_time_down_per_day = 0
+            Sa_time_top_per_day = 0
+            E_time_per_day = 0
+    
+        sio.savemat(datapath[4],
+                    {'E_per_day':E_per_day,'E_track_per_day':E_track_per_day,'P_per_day':P_per_day,
+                     'Sa_track_down_per_day':Sa_track_down_per_day,'Sa_track_top_per_day':Sa_track_top_per_day, 
+                     'Sa_time_down_per_day':Sa_time_down_per_day,'Sa_time_top_per_day':Sa_time_top_per_day, 
+                     'W_down_per_day':W_down_per_day,'W_top_per_day':W_top_per_day,
+                     'E_time_per_day':E_time_per_day},do_compression=True)    
+
+    # values per month        
+    for m in range(12):
+        first_day = int(datetime.date(y,m+1,1).strftime("%j"))
+        last_day = int(datetime.date(y,m+1,calendar.monthrange(y,m+1)[1]).strftime("%j"))
+        days = np.arange(first_day,last_day+1)-1 # -1 because Python is zero-based
+        
+        E_per_year_per_month[y-startyear,m,:,:] = (np.squeeze(np.sum(E_per_day[days,:,:], axis = 0)))
+        E_track_per_year_per_month[y-startyear,m,:,:] = (np.squeeze(np.sum(E_track_per_day[days,:,:], axis = 0)))
+        P_per_year_per_month[y-startyear,m,:,:] = (np.squeeze(np.sum(P_per_day[days,:,:], axis = 0)))
+        Sa_track_down_per_year_per_month[y-startyear,m,:,:] = (np.squeeze(np.mean(Sa_track_down_per_day[days,:,:], axis = 0)))
+        Sa_track_top_per_year_per_month[y-startyear,m,:,:] = (np.squeeze(np.mean(Sa_track_top_per_day[days,:,:], axis = 0)))
+        W_down_per_year_per_month[y-startyear,m,:,:] = (np.squeeze(np.mean(W_down_per_day[days,:,:], axis = 0)))
+        W_top_per_year_per_month[y-startyear,m,:,:] = (np.squeeze(np.mean(W_top_per_day[days,:,:], axis = 0)))
+        north_loss_per_year_per_month[y-startyear,m,:,:] = (np.squeeze(np.sum(north_loss_per_day[days,:,:], axis = 0)))
+        south_loss_per_year_per_month[y-startyear,m,:,:] = (np.squeeze(np.sum(south_loss_per_day[days,:,:], axis = 0)))
+        down_to_top_per_year_per_month[y-startyear,m,:,:] = (np.squeeze(np.sum(down_to_top_per_day[days,:,:], axis = 0)))
+        top_to_down_per_year_per_month[y-startyear,m,:,:] = (np.squeeze(np.sum(top_to_down_per_day[days,:,:], axis = 0)))
+        water_lost_per_year_per_month[y-startyear,m,:,:] = (np.squeeze(np.sum(water_lost_per_day[days,:,:], axis = 0)))
+
+        if timetracking == 1:
+            Sa_time_down_per_year_per_month[y-startyear,m,:,:] = (np.squeeze(np.mean(Sa_time_down_per_day[days,:,:], axis = 0)))
+            Sa_time_top_per_year_per_month[y-startyear,m,:,:] = (np.squeeze(np.mean(Sa_time_top_per_day[days,:,:], axis =0)))
+            E_time_per_year_per_month[y-startyear,m,:,:] = (np.squeeze(np.sum( E_time_per_day[days,:,:] 
+                * E_track_per_day[days,:,:], axis=0)) / np.squeeze(E_track_per_year_per_month[y-startyear,m,:,:]))
+                
+            # remove nans                
+            where_are_NaNs = np.isnan(E_time_per_year_per_month)
+            E_time_per_year_per_month[where_are_NaNs] = 0
+                
+        elif timetracking == 0:
+            Sa_time_down_per_year_per_month = 0
+            Sa_time_top_per_year_per_month = 0
+            E_time_per_year_per_month = 0
+
+# save monthly data
+sio.savemat(datapath[3],
+           {'E_per_year_per_month':E_per_year_per_month,'E_track_per_year_per_month':E_track_per_year_per_month,'P_per_year_per_month':P_per_year_per_month,
+            'Sa_track_down_per_year_per_month':Sa_track_down_per_year_per_month,'Sa_track_top_per_year_per_month':Sa_track_top_per_year_per_month, 
+            'Sa_time_down_per_year_per_month':Sa_time_down_per_year_per_month,'Sa_time_top_per_year_per_month':Sa_time_top_per_year_per_month, 
+            'E_time_per_year_per_month':E_time_per_year_per_month, 'W_down_per_year_per_month':W_down_per_year_per_month,'W_top_per_year_per_month':W_top_per_year_per_month,
+            'north_loss_per_year_per_month':north_loss_per_year_per_month,'south_loss_per_year_per_month':south_loss_per_year_per_month,
+            'down_to_top_per_year_per_month':down_to_top_per_year_per_month,'top_to_down_per_year_per_month':top_to_down_per_year_per_month,
+            'water_lost_per_year_per_month':water_lost_per_year_per_month})
+
+end1 = timer()
+print('The total runtime of Con_E_Recyc_Output is',(end1-start1),' seconds.')
+
+
