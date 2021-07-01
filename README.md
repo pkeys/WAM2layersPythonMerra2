@@ -1,4 +1,4 @@
-# WAM2layersPythonMerra2-beta
+# WAM2layersPythonMerra2
 
 RELEASE NOTES
 The main developer of the original WAM2layers code is Ruud van der Ent (r.j.vanderent@tudelft.nl) and the MERRA2, Kenya-specific modifications led by Patrick W. Keys (patrick.keys@colostate.edu). Please let Pat know when you intend to use this Merra2 code for research, I might be able to offer some kind of support if it is in my interest as well, but I cannot guarantee to do any kind of troubleshooting for free as I have to work on my own projects as well.
